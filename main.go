@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 )
 
 const (
@@ -71,8 +72,61 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	fmt.Println("maze height/width", m.Height, m.Width)
 
+	startTime := time.Now()
+	switch searchType {
+	case "dfs":
+		m.SearchType = DFS
+		solveDFS(&m)
+	default:
+		fmt.Println("Unknown search type:", searchType)
+		os.Exit(1)
+	}
+
+	if len(m.Solution.Action) > 0 {
+		fmt.Println("Solution: ")
+		m.printMaze()
+		fmt.Println("Solution is", len(m.Solution.Cells), "steps.")
+		fmt.Println("Time to solve:", time.Since(startTime))
+	} else {
+		fmt.Println("No solution found")
+	}
+	fmt.Println("Explored", len(m.Explored), "nodes")
+
+}
+func (g *Maze) printMaze() {
+	for i, row := range g.Walls {
+		for j, col := range row {
+			if col.wall {
+				fmt.Print("▉")
+			} else if g.Start.Row == col.State.Row && g.Start.Col == col.State.Col {
+				fmt.Print("A")
+			} else if g.Goal.Row == col.State.Row && g.Goal.Col == col.State.Col {
+				fmt.Print("B")
+			} else if g.IsSolution(Point{Row: i, Col: j}) {
+				fmt.Print("*")
+			} else {
+				fmt.Print(" ")
+			}
+		}
+		fmt.Println()
+	}
+}
+
+func (g *Maze) IsSolution(x Point) bool {
+	for _, step := range g.Solution.Cells {
+		if step.Row == x.Row && step.Col == x.Col {
+			return true
+		}
+	}
+	return false
+}
+
+func solveDFS(m *Maze) {
+	var s DepthFirstSearch
+	s.Game = m
+	fmt.Println("Goal is", s.Game.Goal)
+	s.Solve()
 }
 
 // load the maze
