@@ -11,29 +11,51 @@ import (
 )
 
 const (
-	DFS = iota
-	BFS
-	GBFS
-	AStar
-	DIJKSTRA
+	DFS      = iota // Depth-First Search
+	BFS             // Breadth-First Search
+	GBFS            // Greedy Best-First Search
+	AStar           // A* Search
+	DIJKSTRA        // Dijkstra's Algorithm
 )
 
+// Directions for moving in the maze
 type Point struct {
 	Row int
 	Col int
 }
 
+// Used to keep track of potential nodes that are walls and cannot be explored
 type Wall struct {
 	State Point
 	wall  bool
 }
 
+type Node struct {
+	index  int
+	State  Point
+	Parent *Node
+	Action string
+}
+
+type Solution struct {
+	Action []string
+	Cells  []Point
+}
+
+// Maze structure to hold the maze data
 type Maze struct {
-	Height int
-	Width  int
-	Start  Point
-	Goal   Point
-	Walls  [][]Wall
+	Height      int      // how tall is the maze
+	Width       int      // how wide is the maze
+	Start       Point    // starting point
+	Goal        Point    // goal point
+	Walls       [][]Wall // slice of slices of wall type;
+	CurrentNode Node
+	Solution    Solution
+	Explored    []Point
+	Steps       int
+	NumExplored int
+	Debug       bool
+	SearchType  int
 }
 
 func main() {
