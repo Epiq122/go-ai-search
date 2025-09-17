@@ -1,343 +1,264 @@
-# Real-World Applications of Search Algorithms
+# Real-World Applications: Search Algorithms in Practice
 
-## Taking Your Knowledge Beyond Mazes
+## Chapter Overview
 
-Now that you understand how DFS works, let's see how the same concepts power real-world applications. The patterns you've learned apply to many programming challenges you'll encounter in your career.
+**Learning Objectives:**
 
-## Web Development Applications
+- Apply DFS concepts to solve diverse real-world programming challenges
+- Recognize search algorithm patterns across different domains
+- Implement production-ready solutions using search principles
+- Develop transferable problem-solving frameworks for professional development
 
-### 1. Website Crawling and SEO Analysis
+**Prerequisites:** Complete understanding of DFS algorithm, data structures, and Go programming
 
-**Problem:** A marketing company needs to analyze all pages on a website to check for broken links and SEO issues.
+**Chapter Scope:** Professional applications spanning web development, backend systems, game development, and DevOps
 
-**Solution using DFS:**
+## Chapter 1: Web Development Applications
+
+### 1.1 Website Crawling and SEO Analysis
+
+**Business Context**: Marketing companies need comprehensive website analysis for SEO optimization, broken link detection, and content auditing.
+
+#### Problem Definition
+
+**Challenge**: Systematically explore all accessible pages within a website domain while respecting constraints and collecting structured data.
+
+**Requirements:**
+- Traverse only internal links (same domain)
+- Avoid infinite loops and duplicate processing
+- Collect comprehensive page metadata
+- Handle errors gracefully
+
+#### Implementation Strategy
 
 ```go
 type WebCrawler struct {
-    frontier   []string          // URLs to visit (stack)
-    visited    map[string]bool   // URLs already crawled
-    results    []PageData        // Data collected from each page
-    baseURL    string           // Only crawl within this domain
+    frontier     []string          // URLs to visit (stack for DFS)
+    visited      map[string]bool   // URLs already processed
+    results      []PageAnalysis    // Collected page data
+    domain       string            // Restrict crawling to this domain
+    maxDepth     int               // Prevent infinite crawling
+    robotsTxt    *RobotsConfig     // Respect robots.txt constraints
 }
 
-type PageData struct {
-    URL         string
-    Title       string
-    Links       []string
-    StatusCode  int
-    LoadTime    time.Duration
-}
-
-func (crawler *WebCrawler) CrawlWebsite(startURL string) {
-    // Initialize with starting URL
-    crawler.frontier = append(crawler.frontier, startURL)
-
-    // DFS exploration
-    for len(crawler.frontier) > 0 {
-        // Pop from stack (DFS behavior)
-        currentURL := crawler.frontier[len(crawler.frontier)-1]
-        crawler.frontier = crawler.frontier[:len(crawler.frontier)-1]
-
-        // Skip if already visited
-        if crawler.visited[currentURL] {
-            continue
-        }
-
-        fmt.Printf("Crawling: %s\n", currentURL)
-        crawler.visited[currentURL] = true
-
-        // Fetch and analyze page
-        pageData, err := crawler.fetchPage(currentURL)
-        if err != nil {
-            fmt.Printf("Error crawling %s: %v\n", currentURL, err)
-            continue
-        }
-
-        crawler.results = append(crawler.results, pageData)
-
-        // Add internal links to frontier (go deeper)
-        for _, link := range pageData.Links {
-            if crawler.isInternalLink(link) && !crawler.visited[link] {
-                crawler.frontier = append(crawler.frontier, link)
-            }
-        }
-    }
-}
-
-func (crawler *WebCrawler) isInternalLink(url string) bool {
-    return strings.HasPrefix(url, crawler.baseURL)
+type PageAnalysis struct {
+    URL            string
+    Title          string
+    MetaDescription string
+    HeadingStructure []string
+    InternalLinks   []string
+    ExternalLinks   []string
+    StatusCode      int
+    LoadTime        time.Duration
+    ContentLength   int
+    LastModified    time.Time
 }
 ```
 
-**Why DFS works here:**
-
-- **Memory efficient** - doesn't store all URLs at once
-- **Goes deep** - fully explores one section before moving to another
-- **Natural behavior** - similar to how humans browse websites
-
-### 2. API Dependency Resolution
-
-**Problem:** A microservices system where services depend on each other. You need to start services in the correct order.
-
-**Solution using DFS:**
+#### Core Algorithm Implementation
 
 ```go
-type ServiceManager struct {
+func (crawler *WebCrawler) AnalyzeWebsite(startURL string) (*SiteAnalysis, error) {
+    crawler.frontier = append(crawler.frontier, startURL)
+
+    for len(crawler.frontier) > 0 && len(crawler.results) < crawler.maxPages {
+        // Stack-based removal (DFS behavior)
+        currentURL := crawler.frontier[len(crawler.frontier)-1]
+        crawler.frontier = crawler.frontier[:len(crawler.frontier)-1]
+
+        if err := crawler.processPage(currentURL); err != nil {
+            crawler.logError(currentURL, err)
+            continue
+        }
+
+        // Respect crawl delay
+        time.Sleep(crawler.robotsTxt.CrawlDelay)
+    }
+
+    return crawler.generateSiteAnalysis(), nil
+}
+```
+
+#### Algorithm Benefits
+
+| Benefit | DFS Advantage | Business Impact |
+|---------|---------------|-----------------|
+| **Memory Efficiency** | Stack uses less memory than BFS queue | Handles large websites without resource exhaustion |
+| **Deep Coverage** | Explores complete sections before moving | Comprehensive analysis of site structure |
+| **Natural Navigation** | Follows link structure logically | Mirrors human browsing patterns |
+| **Early Discovery** | Finds deep content quickly | Identifies hidden or poorly linked pages |
+
+### 1.2 API Dependency Resolution
+
+**Business Context**: Microservices architectures require careful orchestration of service startup sequences to respect inter-service dependencies.
+
+#### Problem Definition
+
+**Challenge**: Determine correct service startup order in complex dependency graphs while detecting circular dependencies.
+
+```go
+type ServiceOrchestrator struct {
     services     map[string]*Service
-    startOrder   []string
-    visited      map[string]bool
-    starting     map[string]bool  // Detect circular dependencies
+    dependencies map[string][]string  // service -> required services
+    startOrder   []string            // Computed startup sequence
+    monitoring   *ServiceMonitor     // Health check system
 }
 
 type Service struct {
-    Name         string
-    Dependencies []string
-    Started      bool
+    Name           string
+    Configuration  map[string]interface{}
+    HealthEndpoint string
+    StartupTime    time.Duration
+    Dependencies   []string
+    Status         ServiceStatus
 }
+```
 
-func (sm *ServiceManager) StartAllServices() error {
-    for serviceName := range sm.services {
-        if !sm.services[serviceName].Started {
-            err := sm.startService(serviceName)
-            if err != nil {
-                return err
+#### Dependency Resolution Algorithm
+
+```go
+func (so *ServiceOrchestrator) ComputeStartupOrder() ([]string, error) {
+    var startOrder []string
+    visited := make(map[string]bool)
+    inProgress := make(map[string]bool)
+
+    // Process all services using DFS
+    for serviceName := range so.services {
+        if !visited[serviceName] {
+            if err := so.visitService(serviceName, visited, inProgress, &startOrder); err != nil {
+                return nil, fmt.Errorf("dependency resolution failed: %w", err)
             }
         }
     }
-    return nil
+
+    return startOrder, nil
 }
 
-func (sm *ServiceManager) startService(serviceName string) error {
-    // Check for circular dependency
-    if sm.starting[serviceName] {
-        return fmt.Errorf("circular dependency detected: %s", serviceName)
+func (so *ServiceOrchestrator) visitService(serviceName string, visited, inProgress map[string]bool, startOrder *[]string) error {
+    if inProgress[serviceName] {
+        return fmt.Errorf("circular dependency detected involving service: %s", serviceName)
     }
 
-    // Already started
-    if sm.visited[serviceName] {
+    if visited[serviceName] {
         return nil
     }
 
-    service := sm.services[serviceName]
-    sm.starting[serviceName] = true
+    inProgress[serviceName] = true
 
-    // Start all dependencies first (DFS goes deep)
-    for _, dep := range service.Dependencies {
-        err := sm.startService(dep)
-        if err != nil {
+    // Process dependencies first (DFS depth-first nature)
+    for _, dependency := range so.dependencies[serviceName] {
+        if err := so.visitService(dependency, visited, inProgress, startOrder); err != nil {
             return err
         }
     }
 
-    // Now start this service
-    fmt.Printf("Starting service: %s\n", serviceName)
-    service.Started = true
-    sm.visited[serviceName] = true
-    sm.starting[serviceName] = false
-    sm.startOrder = append(sm.startOrder, serviceName)
+    // Mark as processed and add to startup order
+    visited[serviceName] = true
+    inProgress[serviceName] = false
+    *startOrder = append(*startOrder, serviceName)
 
     return nil
 }
 ```
 
-**Real-world example:**
+## Chapter 2: Backend Systems and Infrastructure
 
-```
-Frontend API depends on Auth Service
-Auth Service depends on Database Service
-Database Service depends on Config Service
+### 2.1 Social Network Analysis
 
-DFS ensures: Config → Database → Auth → Frontend (correct order)
-```
+**Business Context**: Social media platforms require sophisticated analysis of user connections to provide relevant recommendations and detect communities.
 
-### 3. File System Organization
+#### Problem Definition
 
-**Problem:** A content management system needs to find all images in a directory structure to generate thumbnails.
-
-**Solution using DFS:**
+**Challenge**: Analyze social network graphs to identify mutual connections, influence patterns, and recommend new connections within reasonable computational bounds.
 
 ```go
-type FileFinder struct {
-    results    []string          // Found files
-    extensions map[string]bool   // File types to find
+type SocialNetworkAnalyzer struct {
+    network        *SocialGraph
+    analysisCache  *AnalysisCache
+    metrics        *NetworkMetrics
 }
 
-func (ff *FileFinder) FindFiles(rootDir string, extensions []string) ([]string, error) {
-    // Setup
-    ff.extensions = make(map[string]bool)
-    for _, ext := range extensions {
-        ff.extensions[ext] = true
-    }
+type SocialGraph struct {
+    Users       map[string]*User
+    Connections map[string][]string  // userID -> connected userIDs
+    Metadata    map[string]*ConnectionMetadata
+}
 
-    // DFS through directory structure
-    stack := []string{rootDir}
+type ConnectionAnalysis struct {
+    MutualFriends    []string
+    ConnectionPath   []string
+    Influence        float64
+    Interaction      float64
+    SharedInterests  []string
+}
+```
 
-    for len(stack) > 0 {
-        // Pop current directory
-        currentDir := stack[len(stack)-1]
-        stack = stack[:len(stack)-1]
+#### Mutual Connection Discovery
 
-        fmt.Printf("Scanning: %s\n", currentDir)
-
-        entries, err := os.ReadDir(currentDir)
-        if err != nil {
-            continue  // Skip inaccessible directories
-        }
-
-        for _, entry := range entries {
-            fullPath := filepath.Join(currentDir, entry.Name())
-
-            if entry.IsDir() {
-                // Add subdirectory to stack (go deeper first)
-                stack = append(stack, fullPath)
-            } else {
-                // Check if file matches our criteria
-                ext := filepath.Ext(entry.Name())
-                if ff.extensions[ext] {
-                    ff.results = append(ff.results, fullPath)
-                }
+```go
+func (sna *SocialNetworkAnalyzer) FindConnectionOpportunities(userID string, analysisDepth int) (*ConnectionAnalysis, error) {
+    // Find users reachable within specified depth
+    reachableUsers := sna.exploreNetworkDepthFirst(userID, analysisDepth)
+    
+    var recommendations []ConnectionRecommendation
+    
+    for candidateID, pathInfo := range reachableUsers {
+        if candidateID != userID && !sna.isDirectConnection(userID, candidateID) {
+            recommendation := sna.analyzeConnectionPotential(userID, candidateID, pathInfo)
+            if recommendation.Score > sna.metrics.RecommendationThreshold {
+                recommendations = append(recommendations, recommendation)
             }
         }
     }
 
-    return ff.results, nil
+    return sna.buildConnectionAnalysis(userID, recommendations), nil
 }
 
-// Usage
-finder := FileFinder{}
-imageFiles, err := finder.FindFiles("/Users/rob/Photos", []string{".jpg", ".png", ".gif"})
-```
-
-## Backend System Applications
-
-### 4. Database Query Optimization
-
-**Problem:** A complex database with many related tables. Find the optimal path to join tables for a query.
-
-**Solution using DFS:**
-
-```go
-type QueryOptimizer struct {
-    tables      map[string]*Table
-    joinCosts   map[string]map[string]int  // Cost to join table A to table B
-}
-
-type Table struct {
-    Name        string
-    ForeignKeys map[string]string  // column -> referenced table
-}
-
-type JoinPath struct {
-    Tables []string
-    Cost   int
-}
-
-func (qo *QueryOptimizer) FindOptimalJoinPath(startTable, endTable string) *JoinPath {
-    // DFS to find path with minimum cost
-    stack := []*JoinPath{{Tables: []string{startTable}, Cost: 0}}
-    visited := make(map[string]bool)
-    bestPath := (*JoinPath)(nil)
-
-    for len(stack) > 0 {
-        // Pop current path
-        currentPath := stack[len(stack)-1]
-        stack = stack[:len(stack)-1]
-
-        lastTable := currentPath.Tables[len(currentPath.Tables)-1]
-
-        if visited[lastTable] {
-            continue
-        }
-        visited[lastTable] = true
-
-        // Found target table
-        if lastTable == endTable {
-            if bestPath == nil || currentPath.Cost < bestPath.Cost {
-                bestPath = currentPath
-            }
-            continue
-        }
-
-        // Explore connected tables
-        table := qo.tables[lastTable]
-        for _, foreignTable := range table.ForeignKeys {
-            if !visited[foreignTable] {
-                newPath := &JoinPath{
-                    Tables: append(currentPath.Tables, foreignTable),
-                    Cost:   currentPath.Cost + qo.joinCosts[lastTable][foreignTable],
-                }
-                stack = append(stack, newPath)
-            }
-        }
-    }
-
-    return bestPath
-}
-```
-
-### 5. Social Network Analysis
-
-**Problem:** A social media platform wants to find mutual connections between users (friend suggestions).
-
-**Solution using DFS:**
-
-```go
-type SocialNetwork struct {
-    users       map[string]*User
-    connections map[string][]string  // user -> list of friends
-}
-
-type User struct {
-    ID       string
-    Name     string
-    Mutual   []string  // Mutual friends found
-}
-
-func (sn *SocialNetwork) FindMutualFriends(userA, userB string, maxDepth int) []string {
-    pathsFromA := sn.findPathsFromUser(userA, maxDepth)
-    pathsFromB := sn.findPathsFromUser(userB, maxDepth)
-
-    // Find users reachable from both
-    mutual := make(map[string]bool)
-
-    for user := range pathsFromA {
-        if pathsFromB[user] && user != userA && user != userB {
-            mutual[user] = true
-        }
-    }
-
-    var result []string
-    for user := range mutual {
-        result = append(result, user)
-    }
-
-    return result
-}
-
-func (sn *SocialNetwork) findPathsFromUser(startUser string, maxDepth int) map[string]bool {
-    reachable := make(map[string]bool)
-    stack := []struct {
-        user  string
-        depth int
-    }{{startUser, 0}}
+func (sna *SocialNetworkAnalyzer) exploreNetworkDepthFirst(startUser string, maxDepth int) map[string]*PathInfo {
+    reachable := make(map[string]*PathInfo)
+    
+    stack := []*ExplorationState{{
+        UserID:   startUser,
+        Path:     []string{startUser},
+        Depth:    0,
+    }}
 
     for len(stack) > 0 {
         current := stack[len(stack)-1]
         stack = stack[:len(stack)-1]
 
-        if current.depth > maxDepth || reachable[current.user] {
+        if current.Depth > maxDepth {
             continue
         }
 
-        reachable[current.user] = true
+        if existing, found := reachable[current.UserID]; found {
+            // Keep shorter path
+            if len(current.Path) < len(existing.Path) {
+                reachable[current.UserID] = &PathInfo{
+                    Path:   current.Path,
+                    Depth:  current.Depth,
+                }
+            }
+            continue
+        }
 
-        // Add friends to stack
-        for _, friend := range sn.connections[current.user] {
-            if !reachable[friend] {
-                stack = append(stack, struct {
-                    user  string
-                    depth int
-                }{friend, current.depth + 1})
+        reachable[current.UserID] = &PathInfo{
+            Path:  current.Path,
+            Depth: current.Depth,
+        }
+
+        // Explore connected users
+        for _, connectedUserID := range sna.network.Connections[current.UserID] {
+            if !sna.containsUser(current.Path, connectedUserID) {
+                newPath := make([]string, len(current.Path))
+                copy(newPath, current.Path)
+                newPath = append(newPath, connectedUserID)
+
+                stack = append(stack, &ExplorationState{
+                    UserID: connectedUserID,
+                    Path:   newPath,
+                    Depth:  current.Depth + 1,
+                })
             }
         }
     }
@@ -346,377 +267,477 @@ func (sn *SocialNetwork) findPathsFromUser(startUser string, maxDepth int) map[s
 }
 ```
 
-## Game Development Applications
+## Chapter 3: Game Development and Interactive Systems
 
-### 6. Game AI Pathfinding
+### 3.1 Intelligent NPC Pathfinding
 
-**Problem:** An NPC in a game needs to navigate around obstacles to reach the player.
+**Business Context**: Game development requires responsive AI that can navigate complex environments while maintaining performance and providing engaging behavior.
 
-**Solution using DFS:**
+#### Problem Definition
+
+**Challenge**: Create intelligent non-player characters that can navigate dynamic game environments, avoid obstacles, and respond to changing conditions in real-time.
 
 ```go
 type GameAI struct {
-    gameMap    [][]bool  // true = walkable, false = obstacle
-    width      int
-    height     int
+    environment   *GameEnvironment
+    pathfinder    *PathfindingEngine
+    behaviorTree  *BehaviorTree
+    performance   *PerformanceMonitor
 }
 
-type Position struct {
-    X, Y int
+type GameEnvironment struct {
+    TerrainMap    [][]TerrainType
+    DynamicObjects map[string]*DynamicObject
+    StaticObstacles []ObstacleArea
+    Width         int
+    Height        int
+    LastUpdate    time.Time
 }
 
-func (ai *GameAI) FindPathToPlayer(npcPos, playerPos Position) []Position {
-    stack := []struct {
-        pos  Position
-        path []Position
-    }{{npcPos, []Position{npcPos}}}
+type NPCPathfindingRequest struct {
+    StartPosition   Position
+    TargetPosition  Position
+    NPCSize        Size
+    MovementType   MovementType
+    UrgencyLevel   UrgencyLevel
+    AvoidancePrefs AvoidancePreferences
+}
+```
+
+#### Advanced Pathfinding Implementation
+
+```go
+func (ai *GameAI) FindOptimalPath(request *NPCPathfindingRequest) (*NavigationPath, error) {
+    // Use DFS with intelligent pruning for exploration
+    stack := []*PathNode{{
+        Position:     request.StartPosition,
+        Path:         []Position{request.StartPosition},
+        Cost:         0,
+        Heuristic:    ai.calculateHeuristic(request.StartPosition, request.TargetPosition),
+    }}
 
     visited := make(map[Position]bool)
+    bestPath := (*PathNode)(nil)
 
     for len(stack) > 0 {
         current := stack[len(stack)-1]
         stack = stack[:len(stack)-1]
 
-        if visited[current.pos] {
+        if visited[current.Position] {
             continue
         }
-        visited[current.pos] = true
+        visited[current.Position] = true
 
-        // Found player
-        if current.pos == playerPos {
-            return current.path
+        // Check if target reached
+        if ai.isAtTarget(current.Position, request.TargetPosition, request.NPCSize) {
+            if bestPath == nil || current.Cost < bestPath.Cost {
+                bestPath = current
+            }
+            continue
         }
 
-        // Try all 4 directions
-        directions := []Position{
-            {current.pos.X + 1, current.pos.Y},     // right
-            {current.pos.X - 1, current.pos.Y},     // left
-            {current.pos.X, current.pos.Y + 1},     // down
-            {current.pos.X, current.pos.Y - 1},     // up
-        }
+        // Generate valid moves based on NPC capabilities
+        validMoves := ai.generateValidMoves(current.Position, request)
+        
+        for _, nextPosition := range validMoves {
+            if !visited[nextPosition] {
+                newPath := make([]Position, len(current.Path))
+                copy(newPath, current.Path)
+                newPath = append(newPath, nextPosition)
 
-        for _, next := range directions {
-            if ai.isValidMove(next) && !visited[next] {
-                newPath := make([]Position, len(current.path))
-                copy(newPath, current.path)
-                newPath = append(newPath, next)
+                moveCost := ai.calculateMovementCost(current.Position, nextPosition, request)
+                
+                pathNode := &PathNode{
+                    Position:  nextPosition,
+                    Path:      newPath,
+                    Cost:      current.Cost + moveCost,
+                    Heuristic: ai.calculateHeuristic(nextPosition, request.TargetPosition),
+                }
 
-                stack = append(stack, struct {
-                    pos  Position
-                    path []Position
-                }{next, newPath})
+                stack = append(stack, pathNode)
             }
         }
     }
 
-    return nil  // No path found
-}
+    if bestPath != nil {
+        navigationPath := ai.convertToNavigationPath(bestPath, request)
+        return navigationPath, nil
+    }
 
-func (ai *GameAI) isValidMove(pos Position) bool {
-    return pos.X >= 0 && pos.X < ai.width &&
-           pos.Y >= 0 && pos.Y < ai.height &&
-           ai.gameMap[pos.Y][pos.X]  // Check if walkable
+    return nil, errors.New("no valid path found")
 }
 ```
 
-## Data Processing Applications
+## Chapter 4: Data Processing and Analytics
 
-### 7. Log Analysis and Pattern Detection
+### 4.1 Log Analysis and Pattern Detection
 
-**Problem:** Analyze web server logs to trace user sessions and detect suspicious behavior.
+**Business Context**: Security systems and operational monitoring require real-time analysis of log streams to detect anomalies and security threats.
 
-**Solution using DFS:**
+#### Problem Definition
+
+**Challenge**: Process high-volume log streams to identify suspicious patterns, trace user sessions, and correlate events across multiple systems.
 
 ```go
-type LogAnalyzer struct {
-    logEntries  []LogEntry
-    sessions    map[string]*UserSession
+type LogAnalysisEngine struct {
+    processors    []LogProcessor
+    patterns      *PatternDatabase
+    correlations  *CorrelationEngine
+    alerting      *AlertingSystem
+    storage       *LogStorage
 }
 
-type LogEntry struct {
-    Timestamp time.Time
-    UserID    string
-    Action    string
-    IPAddress string
-    UserAgent string
+type SecurityEvent struct {
+    Timestamp     time.Time
+    UserID        string
+    SessionID     string
+    EventType     EventType
+    SourceIP      string
+    UserAgent     string
+    Resource      string
+    Result        string
+    RiskScore     float64
+    Context       map[string]interface{}
 }
 
-type UserSession struct {
-    UserID    string
-    Actions   []LogEntry
-    Suspicious bool
+type SessionAnalysis struct {
+    SessionID     string
+    UserID        string
+    Events        []SecurityEvent
+    RiskLevel     RiskLevel
+    Anomalies     []AnomalyDetection
+    Duration      time.Duration
+    EventCount    int
 }
+```
 
-func (la *LogAnalyzer) TraceUserSessions() {
-    // Group by user
-    userLogs := make(map[string][]LogEntry)
-    for _, entry := range la.logEntries {
-        userLogs[entry.UserID] = append(userLogs[entry.UserID], entry)
+#### Session Trace Analysis
+
+```go
+func (lae *LogAnalysisEngine) AnalyzeUserSession(sessionID string, events []SecurityEvent) (*SessionAnalysis, error) {
+    analysis := &SessionAnalysis{
+        SessionID: sessionID,
+        Events:    events,
+        Anomalies: []AnomalyDetection{},
     }
 
-    // DFS through each user's action sequence
-    for userID, logs := range userLogs {
-        session := la.analyzeUserSession(userID, logs)
-        la.sessions[userID] = session
+    if len(events) == 0 {
+        return analysis, nil
     }
+
+    analysis.UserID = events[0].UserID
+    analysis.Duration = events[len(events)-1].Timestamp.Sub(events[0].Timestamp)
+    analysis.EventCount = len(events)
+
+    // Use DFS to trace through event sequences
+    suspiciousSequences := lae.findSuspiciousPatterns(events)
+    analysis.Anomalies = append(analysis.Anomalies, suspiciousSequences...)
+
+    // Calculate overall risk level
+    analysis.RiskLevel = lae.calculateSessionRisk(analysis)
+
+    return analysis, nil
 }
 
-func (la *LogAnalyzer) analyzeUserSession(userID string, logs []LogEntry) *UserSession {
-    session := &UserSession{UserID: userID}
+func (lae *LogAnalysisEngine) findSuspiciousPatterns(events []SecurityEvent) []AnomalyDetection {
+    var anomalies []AnomalyDetection
+    
+    // DFS through event sequences to find concerning patterns
+    stack := []*EventSequence{{
+        Events: []SecurityEvent{},
+        Index:  0,
+    }}
 
-    // DFS through action sequences
-    stack := []struct {
-        index   int
-        pattern []string
-    }{{0, []string{}}}
-
-    suspiciousPatterns := [][]string{
-        {"login", "admin_access", "delete_user"},
-        {"rapid_requests", "rapid_requests", "rapid_requests"},
-    }
+    knownPatterns := lae.patterns.GetSuspiciousPatterns()
 
     for len(stack) > 0 {
         current := stack[len(stack)-1]
         stack = stack[:len(stack)-1]
 
-        if current.index >= len(logs) {
+        if current.Index >= len(events) {
             continue
         }
 
-        entry := logs[current.index]
-        newPattern := append(current.pattern, entry.Action)
-        session.Actions = append(session.Actions, entry)
+        event := events[current.Index]
+        newSequence := append(current.Events, event)
 
-        // Check for suspicious patterns
-        for _, suspicious := range suspiciousPatterns {
-            if la.matchesPattern(newPattern, suspicious) {
-                session.Suspicious = true
-                fmt.Printf("Suspicious activity detected for user %s\n", userID)
+        // Check if current sequence matches suspicious patterns
+        for _, pattern := range knownPatterns {
+            if lae.matchesPattern(newSequence, pattern) {
+                anomaly := AnomalyDetection{
+                    PatternName: pattern.Name,
+                    Events:      newSequence,
+                    RiskScore:   pattern.RiskScore,
+                    Confidence:  lae.calculateConfidence(newSequence, pattern),
+                    Description: pattern.Description,
+                }
+                anomalies = append(anomalies, anomaly)
             }
         }
 
-        // Continue exploring
-        stack = append(stack, struct {
-            index   int
-            pattern []string
-        }{current.index + 1, newPattern})
-    }
-
-    return session
-}
-
-func (la *LogAnalyzer) matchesPattern(actions, pattern []string) bool {
-    if len(actions) < len(pattern) {
-        return false
-    }
-
-    for i := 0; i <= len(actions)-len(pattern); i++ {
-        match := true
-        for j := 0; j < len(pattern); j++ {
-            if actions[i+j] != pattern[j] {
-                match = false
-                break
-            }
+        // Continue exploring if sequence hasn't grown too long
+        if len(newSequence) < lae.patterns.MaxPatternLength {
+            stack = append(stack, &EventSequence{
+                Events: newSequence,
+                Index:  current.Index + 1,
+            })
         }
-        if match {
-            return true
-        }
+
+        // Also explore without including current event
+        stack = append(stack, &EventSequence{
+            Events: current.Events,
+            Index:  current.Index + 1,
+        })
     }
-    return false
+
+    return lae.consolidateAnomalies(anomalies)
 }
 ```
 
-## DevOps and Infrastructure
+## Chapter 5: DevOps and Infrastructure Management
 
-### 8. Configuration Management
+### 5.1 Configuration Deployment Pipeline
 
-**Problem:** Deploy configuration changes across a cluster of servers with dependencies.
+**Business Context**: Modern DevOps requires sophisticated orchestration of configuration deployments across complex infrastructure with interdependent services.
 
-**Solution using DFS:**
+#### Problem Definition
+
+**Challenge**: Deploy configuration changes across distributed systems while respecting dependencies, minimizing downtime, and ensuring rollback capabilities.
 
 ```go
-type ConfigManager struct {
-    servers      map[string]*Server
-    dependencies map[string][]string  // server -> depends on these servers
+type DeploymentOrchestrator struct {
+    infrastructure *InfrastructureMap
+    dependencies   *DependencyGraph
+    strategies     map[string]DeploymentStrategy
+    monitoring     *DeploymentMonitor
+    rollback       *RollbackManager
 }
 
-type Server struct {
-    Name       string
-    Config     map[string]string
-    Updated    bool
-    Deploying  bool
+type DeploymentStrategy struct {
+    Name            string
+    RolloutType     RolloutType
+    HealthChecks    []HealthCheck
+    RollbackTriggers []RollbackTrigger
+    MaxConcurrency  int
+    Timeout         time.Duration
 }
 
-func (cm *ConfigManager) DeployConfigurations() error {
-    for serverName := range cm.servers {
-        if !cm.servers[serverName].Updated {
-            err := cm.deployToServer(serverName)
-            if err != nil {
-                return err
+type DeploymentPlan struct {
+    Phases        []DeploymentPhase
+    Dependencies  map[string][]string
+    EstimatedTime time.Duration
+    RiskLevel     RiskLevel
+}
+```
+
+#### Intelligent Deployment Planning
+
+```go
+func (do *DeploymentOrchestrator) PlanDeployment(changes []ConfigurationChange) (*DeploymentPlan, error) {
+    // Analyze impact and build deployment graph
+    impactAnalysis := do.analyzeImpact(changes)
+    
+    plan := &DeploymentPlan{
+        Phases:      []DeploymentPhase{},
+        Dependencies: make(map[string][]string),
+    }
+
+    // Use DFS to determine deployment order
+    deploymentOrder, err := do.calculateDeploymentOrder(impactAnalysis.AffectedServices)
+    if err != nil {
+        return nil, fmt.Errorf("deployment planning failed: %w", err)
+    }
+
+    // Create deployment phases
+    plan.Phases = do.createDeploymentPhases(deploymentOrder, changes)
+    plan.EstimatedTime = do.estimateDeploymentTime(plan.Phases)
+    plan.RiskLevel = do.assessRiskLevel(plan)
+
+    return plan, nil
+}
+
+func (do *DeploymentOrchestrator) calculateDeploymentOrder(services []string) ([]string, error) {
+    var deploymentOrder []string
+    visited := make(map[string]bool)
+    deploying := make(map[string]bool)
+
+    for _, service := range services {
+        if !visited[service] {
+            if err := do.visitServiceForDeployment(service, visited, deploying, &deploymentOrder); err != nil {
+                return nil, err
             }
         }
     }
-    return nil
+
+    return deploymentOrder, nil
 }
 
-func (cm *ConfigManager) deployToServer(serverName string) error {
-    server := cm.servers[serverName]
-
-    // Prevent circular dependencies
-    if server.Deploying {
-        return fmt.Errorf("circular dependency detected: %s", serverName)
+func (do *DeploymentOrchestrator) visitServiceForDeployment(service string, visited, deploying map[string]bool, order *[]string) error {
+    if deploying[service] {
+        return fmt.Errorf("circular deployment dependency detected: %s", service)
     }
 
-    if server.Updated {
+    if visited[service] {
         return nil
     }
 
-    server.Deploying = true
+    deploying[service] = true
 
-    // Deploy to dependencies first (DFS)
-    for _, dep := range cm.dependencies[serverName] {
-        err := cm.deployToServer(dep)
-        if err != nil {
+    // Deploy dependencies first
+    dependencies := do.dependencies.GetDependencies(service)
+    for _, dependency := range dependencies {
+        if err := do.visitServiceForDeployment(dependency, visited, deploying, order); err != nil {
             return err
         }
     }
 
-    // Now deploy to this server
-    fmt.Printf("Deploying configuration to %s\n", serverName)
-    err := cm.performDeployment(server)
-    if err != nil {
-        return err
-    }
-
-    server.Updated = true
-    server.Deploying = false
+    visited[service] = true
+    deploying[service] = false
+    *order = append(*order, service)
 
     return nil
 }
 ```
 
-## Key Patterns You Can Apply
+## Chapter 6: Transferable Patterns and Frameworks
 
-### 1. The Search Template
+### 6.1 Universal Search Template
 
-This pattern works for any exploration problem:
+**Framework**: A reusable pattern applicable across all search problems
 
 ```go
-type SearchProblem struct {
-    start    State
-    goal     State
-    frontier []State
-    visited  map[State]bool
+type SearchFramework[T any] struct {
+    start      T
+    goal       func(T) bool
+    neighbors  func(T) []T
+    visited    map[T]bool
+    frontier   []T
+    strategy   SearchStrategy
 }
 
-func (sp *SearchProblem) solve() Solution {
-    sp.frontier = append(sp.frontier, sp.start)
+func (sf *SearchFramework[T]) Search() (*SearchResult[T], error) {
+    sf.frontier = append(sf.frontier, sf.start)
+    sf.visited = make(map[T]bool)
 
-    for len(sp.frontier) > 0 {
-        current := sp.removeFromFrontier()  // DFS: from end, BFS: from beginning
+    for len(sf.frontier) > 0 {
+        current := sf.removeFromFrontier()
 
-        if current == sp.goal {
-            return sp.buildSolution(current)
+        if sf.visited[current] {
+            continue
+        }
+        sf.visited[current] = true
+
+        if sf.goal(current) {
+            return sf.buildSolution(current), nil
         }
 
-        sp.visited[current] = true
-
-        for _, neighbor := range sp.getNeighbors(current) {
-            if !sp.visited[neighbor] {
-                sp.addToFrontier(neighbor)
+        for _, neighbor := range sf.neighbors(current) {
+            if !sf.visited[neighbor] {
+                sf.addToFrontier(neighbor)
             }
         }
     }
-    return nil
+
+    return nil, errors.New("no solution found")
 }
 ```
 
-### 2. Dependency Resolution Pattern
+### 6.2 Dependency Resolution Pattern
+
+**Framework**: Generic dependency management for any ordered execution problem
 
 ```go
-func resolveDependencies(item string, dependencies map[string][]string, resolved []string, resolving map[string]bool) error {
-    if resolving[item] {
-        return errors.New("circular dependency")
+func ResolveDependencies[T comparable](items []T, getDependencies func(T) []T) ([]T, error) {
+    var resolved []T
+    visited := make(map[T]bool)
+    resolving := make(map[T]bool)
+
+    for _, item := range items {
+        if !visited[item] {
+            if err := visitItem(item, getDependencies, visited, resolving, &resolved); err != nil {
+                return nil, err
+            }
+        }
     }
 
-    if contains(resolved, item) {
+    return resolved, nil
+}
+
+func visitItem[T comparable](item T, getDependencies func(T) []T, visited, resolving map[T]bool, resolved *[]T) error {
+    if resolving[item] {
+        return errors.New("circular dependency detected")
+    }
+
+    if visited[item] {
         return nil
     }
 
     resolving[item] = true
 
-    for _, dep := range dependencies[item] {
-        err := resolveDependencies(dep, dependencies, resolved, resolving)
-        if err != nil {
+    for _, dep := range getDependencies(item) {
+        if err := visitItem(dep, getDependencies, visited, resolving, resolved); err != nil {
             return err
         }
     }
 
-    resolved = append(resolved, item)
+    visited[item] = true
     resolving[item] = false
+    *resolved = append(*resolved, item)
 
     return nil
 }
 ```
 
-### 3. Tree/Graph Traversal Pattern
+## Key Takeaways
 
-```go
-func traverse(root *Node, visited map[*Node]bool, action func(*Node)) {
-    stack := []*Node{root}
+### Professional Application Patterns
 
-    for len(stack) > 0 {
-        current := stack[len(stack)-1]
-        stack = stack[:len(stack)-1]
+| Domain | Core Pattern | Business Value |
+|--------|--------------|----------------|
+| **Web Development** | Systematic exploration of linked resources | Comprehensive analysis, SEO optimization |
+| **Backend Systems** | Dependency-aware processing sequences | Reliable service orchestration |
+| **Game Development** | Intelligent pathfinding with constraints | Responsive AI behavior |
+| **Data Analytics** | Pattern detection in temporal sequences | Security monitoring, anomaly detection |
+| **Infrastructure** | Configuration deployment orchestration | Risk mitigation, reliable deployments |
 
-        if visited[current] {
-            continue
-        }
+### Transferable Skills Developed
 
-        visited[current] = true
-        action(current)
+1. **Problem Decomposition**: Breaking complex problems into searchable state spaces
+2. **Algorithm Selection**: Choosing appropriate search strategies for different constraints
+3. **Performance Optimization**: Balancing thoroughness with computational efficiency
+4. **Error Handling**: Graceful handling of edge cases and failures
+5. **System Design**: Building robust, maintainable search-based solutions
 
-        for _, child := range current.Children {
-            if !visited[child] {
-                stack = append(stack, child)
-            }
-        }
-    }
-}
-```
+### Career Development Applications
 
-## Career Applications
+#### Technical Interviews
 
-### Skills You've Gained
+Common interview questions you can now handle:
 
-1. **Problem decomposition** - Breaking complex problems into searchable states
-2. **Algorithm thinking** - Systematic exploration strategies
-3. **Data structure usage** - Choosing stacks vs queues vs priority queues
-4. **Performance analysis** - Understanding time/space tradeoffs
+- "Design a web crawler that respects robots.txt"
+- "Implement a dependency resolution system for microservices"
+- "Create a file discovery system for large directory trees"
+- "Build a recommendation engine for social networks"
+- "Design a configuration deployment pipeline"
 
-### Interview Questions You Can Handle
+#### Project Portfolio
 
-- "How would you crawl a website?"
-- "Design a system to resolve service dependencies"
-- "Find all files matching a pattern in a directory tree"
-- "Detect cycles in a dependency graph"
-- "Implement a recommendation system"
+Real-world projects demonstrating your skills:
 
-### Projects You Can Build
+- **Website Analysis Tool**: SEO crawler with comprehensive reporting
+- **Service Orchestration Platform**: Microservices dependency management
+- **Game AI Framework**: Intelligent NPC behavior system
+- **Security Analytics Engine**: Log analysis and threat detection
+- **Infrastructure Automation**: Configuration management platform
 
-- **Web scraper** for job listings or product prices
-- **File organizer** that categorizes files by type and size
-- **Social network analyzer** to find connection paths
-- **Build system** that compiles projects in dependency order
-- **Game AI** with pathfinding and decision making
+### Next Module Preview
 
-## Next Steps
+The final module, **Next Steps and Advanced Topics**, will guide you through:
 
-You now understand how DFS applies to real-world programming challenges. The final document, **Next Steps**, will show you how to:
+- Extending the maze solver with additional algorithms (BFS, A*, Dijkstra)
+- Building production-ready applications using these patterns
+- Advanced AI concepts and machine learning integration
+- Career development strategies for AI and systems programming
+- Open source contribution opportunities
 
-- Extend the maze solver with new algorithms
-- Build your own projects using these patterns
-- Continue learning advanced AI concepts
-- Apply these skills in your career
-
-**Remember:** The maze solver wasn't just about mazes - it was about learning a fundamental approach to systematic problem-solving that you'll use throughout your programming career.
+**Professional Development Insight**: The search algorithms you've mastered are foundational to numerous specialized fields including artificial intelligence, operations research, network analysis, and distributed systems design. Your understanding of these patterns positions you for advanced roles in software engineering, data science, and system architecture.

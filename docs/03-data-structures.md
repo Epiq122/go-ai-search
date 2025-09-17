@@ -1,87 +1,601 @@
-# Data Structures in Maze Solving
+# Data Structures in Algorithmic Problem Solving
 
-## Understanding the Core Data Structures
+## Chapter Overview
 
-This document explains the key data structures that make maze solving possible. Think of these as the **tools** your algorithm uses to organize and process information.
+**Learning Objectives:**
 
-## The Stack: Your Algorithm's Memory
+- Master fundamental data structures used in search algorithms
+- Understand the relationship between data structures and algorithm behavior
+- Implement efficient data management for maze solving
+- Apply data structure concepts to real-world problems
 
-### What is a Stack?
+**Prerequisites:** Basic Go programming (structs, slices, pointers, methods)
 
-A stack follows **LIFO** (Last In, First Out) - like a stack of plates:
+## Chapter 1: The Stack - Foundation of Depth-First Search
 
-- **Push:** Add a new plate to the top
-- **Pop:** Remove the top plate
-- **Peek:** Look at the top plate without removing it
+### 1.1 Stack Fundamentals
 
-### Stack in Daily Life
+**Definition**: A stack is a **Last-In-First-Out (LIFO)** data structure supporting three primary operations:
 
-```
-Email inbox (newest on top)
-Browser back button (last page first)
-Undo function (last action first)
-Function calls (last called, first returned)
-```
+| Operation | Description                      | Time Complexity |
+| --------- | -------------------------------- | --------------- |
+| **Push**  | Add element to top               | O(1)            |
+| **Pop**   | Remove top element               | O(1)            |
+| **Peek**  | View top element without removal | O(1)            |
 
-### Stack Implementation in Go
+#### Real-World Stack Examples
+
+| Context             | Stack Behavior                       | LIFO Demonstration           |
+| ------------------- | ------------------------------------ | ---------------------------- |
+| **Email Inbox**     | Newest emails appear first           | Latest received, first read  |
+| **Browser History** | Back button returns to previous page | Last visited, first returned |
+| **Function Calls**  | Most recent call executes first      | Last called, first completed |
+| **Undo Operations** | Most recent action reversed first    | Last action, first undone    |
+
+### 1.2 Stack Implementation in Go
 
 ```go
 type Stack struct {
-    items []string
+    items []Point    // Dynamic array for storage
+    size  int        // Current number of elements
 }
 
-// Push - add to top
-func (s *Stack) Push(item string) {
+// Push - Add element to top of stack
+func (s *Stack) Push(item Point) {
     s.items = append(s.items, item)
+    s.size++
 }
 
-// Pop - remove from top
-func (s *Stack) Pop() (string, error) {
-    if len(s.items) == 0 {
-        return "", errors.New("stack is empty")
+// Pop - Remove and return top element
+func (s *Stack) Pop() (Point, error) {
+    if s.IsEmpty() {
+        return Point{}, errors.New("stack underflow: cannot pop from empty stack")
     }
 
-    // Get the last item
-    item := s.items[len(s.items)-1]
+    // Retrieve top element
+    top := s.items[s.size-1]
 
-    // Remove the last item
-    s.items = s.items[:len(s.items)-1]
+    // Remove top element
+    s.items = s.items[:s.size-1]
+    s.size--
 
-    return item, nil
+    return top, nil
 }
 
-// Peek - look at top without removing
-func (s *Stack) Peek() (string, error) {
-    if len(s.items) == 0 {
-        return "", errors.New("stack is empty")
+// Peek - View top element without removal
+func (s *Stack) Peek() (Point, error) {
+    if s.IsEmpty() {
+        return Point{}, errors.New("stack empty: no element to peek")
     }
-    return s.items[len(s.items)-1], nil
+    return s.items[s.size-1], nil
+}
+
+// IsEmpty - Check if stack contains no elements
+func (s *Stack) IsEmpty() bool {
+    return s.size == 0
+}
+
+// Size - Return current number of elements
+func (s *Stack) Size() int {
+    return s.size
 }
 ```
 
-### Why DFS Uses a Stack
+### 1.3 Stack Usage in Depth-First Search
 
-**DFS explores as deep as possible before backtracking.** A stack naturally provides this behavior:
+**DFS Exploration Pattern:**
 
-```
-Path exploration:
-Start → Right → Right → Down → DEAD END
-                        ↑
-                    Pop back here
-                → Try Down → Down → GOAL!
-```
+1. **Push** starting position onto stack
+2. **Pop** next position to explore
+3. **Push** all unvisited neighbors
+4. Repeat until goal found or stack empty
 
-**Stack contents during exploration:**
+#### DFS Stack Trace Example
 
 ```
-1. [Start]
-2. [Start, Right1]
-3. [Start, Right1, Right2]
-4. [Start, Right1, Right2, Down1]
-5. [Start, Right1, Right2] (popped dead end)
-6. [Start, Right1, Right2, Down2]
-7. [Start, Right1, Right2, Down2, Down3] (found goal!)
+Maze Grid:
+[S][.][.]
+[#][#][.]
+[.][.][G]
+
+Stack Evolution:
+Step 1: [S(0,0)]                    // Start position
+Step 2: [Right(0,1)]                // Explore right from start
+Step 3: [Right(0,1), Right(0,2)]    // Continue right
+Step 4: [Right(0,1), Down(1,2)]     // Move down from (0,2)
+Step 5: [Right(0,1), Down(2,2)]     // Continue down
+Step 6: [Right(0,1)]                // Found goal at (2,2)!
 ```
+
+## Chapter 2: The Frontier - Managing Search Boundaries
+
+### 2.1 Frontier Concept
+
+**Definition**: The frontier represents the **boundary between explored and unexplored regions** of the search space.
+
+#### Frontier Analogies
+
+| Domain              | Frontier Representation                               |
+| ------------------- | ----------------------------------------------------- |
+| **Geography**       | Border between mapped and unmapped territory          |
+| **Travel Planning** | Destinations you have tickets for but haven't visited |
+| **Research**        | Known problems you haven't investigated yet           |
+| **Game Strategy**   | Moves you've identified but haven't executed          |
+
+### 2.2 Frontier Implementation
+
+```go
+type SearchFrontier struct {
+    nodes    []*Node    // Collection of unexplored nodes
+    strategy string     // "stack" for DFS, "queue" for BFS
+}
+
+// Add - Insert node into frontier
+func (f *SearchFrontier) Add(node *Node) {
+    f.nodes = append(f.nodes, node)
+}
+
+// Remove - Extract next node based on strategy
+func (f *SearchFrontier) Remove() (*Node, error) {
+    if f.IsEmpty() {
+        return nil, errors.New("frontier exhausted: no more nodes to explore")
+    }
+
+    var node *Node
+    switch f.strategy {
+    case "stack":    // LIFO - Depth-First Search
+        node = f.nodes[len(f.nodes)-1]
+        f.nodes = f.nodes[:len(f.nodes)-1]
+    case "queue":    // FIFO - Breadth-First Search
+        node = f.nodes[0]
+        f.nodes = f.nodes[1:]
+    default:
+        return nil, errors.New("unknown frontier strategy")
+    }
+
+    return node, nil
+}
+
+// IsEmpty - Check if frontier contains any nodes
+func (f *SearchFrontier) IsEmpty() bool {
+    return len(f.nodes) == 0
+}
+
+// Contains - Verify if state already exists in frontier
+func (f *SearchFrontier) Contains(state Point) bool {
+    for _, node := range f.nodes {
+        if node.State.Row == state.Row && node.State.Col == state.Col {
+            return true
+        }
+    }
+    return false
+}
+```
+
+### 2.3 Frontier State Management
+
+#### Frontier Lifecycle
+
+| Phase              | Description                  | Frontier Content      |
+| ------------------ | ---------------------------- | --------------------- |
+| **Initialization** | Add starting state           | [Start]               |
+| **Expansion**      | Add neighboring states       | [Start, Neighbors...] |
+| **Exploration**    | Remove next state to explore | [Remaining neighbors] |
+| **Termination**    | Goal found or frontier empty | [] or [Goal found]    |
+
+## Chapter 3: Nodes - Representing Search States
+
+### 3.1 Node Structure and Purpose
+
+**Node Definition**: A node encapsulates a **search state** along with metadata for path reconstruction and decision making.
+
+```go
+type Node struct {
+    State  Point    // Current position in search space
+    Parent *Node    // Reference to predecessor node
+    Action string   // Action that led to this state
+    Cost   int      // Path cost from start to this node
+    Depth  int      // Distance from start node
+}
+
+// Constructor for root node
+func NewRootNode(startState Point) *Node {
+    return &Node{
+        State:  startState,
+        Parent: nil,        // Root has no parent
+        Action: "",         // No action to reach start
+        Cost:   0,          // Zero cost at start
+        Depth:  0,          // Zero depth at start
+    }
+}
+
+// Constructor for child node
+func NewChildNode(state Point, parent *Node, action string) *Node {
+    return &Node{
+        State:  state,
+        Parent: parent,
+        Action: action,
+        Cost:   parent.Cost + 1,    // Increment path cost
+        Depth:  parent.Depth + 1,   // Increment depth
+    }
+}
+```
+
+### 3.2 Path Reconstruction Using Parent Pointers
+
+**Path Reconstruction Algorithm:**
+
+1. Start from goal node
+2. Follow parent pointers backward
+3. Collect actions in reverse order
+4. Reverse action sequence for start-to-goal path
+
+```go
+// BuildSolutionPath - Reconstruct path from start to goal
+func (n *Node) BuildSolutionPath() []string {
+    var actions []string
+    current := n
+
+    // Traverse backward through parent links
+    for current.Parent != nil {
+        actions = append(actions, current.Action)
+        current = current.Parent
+    }
+
+    // Reverse to get start-to-goal sequence
+    for i, j := 0, len(actions)-1; i < j; i, j = i+1, j-1 {
+        actions[i], actions[j] = actions[j], actions[i]
+    }
+
+    return actions
+}
+
+// GetPathLength - Calculate total path length
+func (n *Node) GetPathLength() int {
+    return n.Depth
+}
+
+// GetPathCost - Return accumulated path cost
+func (n *Node) GetPathCost() int {
+    return n.Cost
+}
+```
+
+### 3.3 Node Relationship Visualization
+
+```
+Path Reconstruction Example:
+
+Goal Node ← "down" ← Middle Node ← "right" ← Start Node
+   (2,2)              (1,2)                  (1,1)
+
+Backward Traversal: ["down", "right"]
+Forward Path: ["right", "down"]
+
+Memory Structure:
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│ Start Node  │◄───┤Middle Node  │◄───┤ Goal Node   │
+│ State:(1,1) │    │State:(1,2)  │    │State:(2,2)  │
+│ Parent:nil  │    │Parent:Start │    │Parent:Middle│
+│ Action:""   │    │Action:"right"│    │Action:"down"│
+└─────────────┘    └─────────────┘    └─────────────┘
+```
+
+## Chapter 4: Explored Set - Cycle Prevention
+
+### 4.1 The Explored Set Concept
+
+**Purpose**: Track visited states to prevent infinite loops and redundant exploration.
+
+#### Why Cycle Prevention Matters
+
+```
+Without Explored Set:
+Start → Right → Down → Left → Up → Right → Down → Left...
+(Infinite loop)
+
+With Explored Set:
+Start → Right → Down ← (Left blocked - already explored)
+Continue to new unexplored areas
+```
+
+### 4.2 Explored Set Implementation Options
+
+#### Option 1: Map-Based (Efficient)
+
+```go
+type ExploredSet struct {
+    visited map[Point]bool
+}
+
+func NewExploredSet() *ExploredSet {
+    return &ExploredSet{
+        visited: make(map[Point]bool),
+    }
+}
+
+func (e *ExploredSet) Add(state Point) {
+    e.visited[state] = true
+}
+
+func (e *ExploredSet) Contains(state Point) bool {
+    return e.visited[state]
+}
+
+func (e *ExploredSet) Size() int {
+    return len(e.visited)
+}
+```
+
+#### Option 2: Slice-Based (Simple)
+
+```go
+type ExploredSlice struct {
+    states []Point
+}
+
+func (e *ExploredSlice) Add(state Point) {
+    e.states = append(e.states, state)
+}
+
+func (e *ExploredSlice) Contains(state Point) bool {
+    for _, explored := range e.states {
+        if explored.Row == state.Row && explored.Col == state.Col {
+            return true
+        }
+    }
+    return false
+}
+```
+
+#### Performance Comparison
+
+| Implementation  | Add Operation  | Contains Check | Memory Usage    |
+| --------------- | -------------- | -------------- | --------------- |
+| **Map-based**   | O(1) average   | O(1) average   | Higher overhead |
+| **Slice-based** | O(1) amortized | O(n) linear    | Lower overhead  |
+
+### 4.3 Explored Set Integration
+
+```go
+// Complete search with cycle prevention
+func (dfs *DepthFirstSearch) Solve() ([]string, error) {
+    frontier := NewSearchFrontier("stack")
+    explored := NewExploredSet()
+
+    // Initialize with start state
+    startNode := NewRootNode(dfs.Game.Start)
+    frontier.Add(startNode)
+
+    for !frontier.IsEmpty() {
+        current, err := frontier.Remove()
+        if err != nil {
+            return nil, err
+        }
+
+        // Check for goal before marking as explored
+        if current.State == dfs.Game.Goal {
+            return current.BuildSolutionPath(), nil
+        }
+
+        // Mark current state as explored
+        explored.Add(current.State)
+
+        // Expand neighbors
+        for _, neighbor := range dfs.GetNeighbors(current) {
+            neighborState := neighbor.State
+
+            // Skip if already explored or in frontier
+            if explored.Contains(neighborState) || frontier.Contains(neighborState) {
+                continue
+            }
+
+            frontier.Add(neighbor)
+        }
+    }
+
+    return nil, errors.New("no solution found")
+}
+```
+
+## Chapter 5: Algorithm Data Flow Integration
+
+### 5.1 Complete Search Process
+
+#### Data Structure Orchestration
+
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│  Frontier   │    │   Current   │    │  Explored   │
+│   (Stack)   │    │    Node     │    │    Set      │
+├─────────────┤    ├─────────────┤    ├─────────────┤
+│   Remove    │───►│   Process   │───►│     Add     │
+│    Next     │    │   State     │    │   State     │
+└─────────────┘    └─────────────┘    └─────────────┘
+       ▲                  │
+       │                  ▼
+┌─────────────┐    ┌─────────────┐
+│  Generate   │    │    Goal     │
+│ Neighbors   │    │    Check    │
+└─────────────┘    └─────────────┘
+```
+
+### 5.2 Algorithm State Transitions
+
+| Step  | Frontier | Current | Explored      | Action           |
+| ----- | -------- | ------- | ------------- | ---------------- |
+| **0** | [Start]  | null    | {}            | Initialize       |
+| **1** | []       | Start   | {Start}       | Expand neighbors |
+| **2** | [N1,N2]  | Start   | {Start}       | Add to frontier  |
+| **3** | [N2]     | N1      | {Start,N1}    | Process N1       |
+| **4** | [N2,N3]  | N1      | {Start,N1}    | Add N1 neighbors |
+| **5** | [N3]     | N2      | {Start,N1,N2} | Process N2       |
+
+### 5.3 Memory and Performance Analysis
+
+#### Space Complexity Analysis
+
+| Component        | Worst Case | Typical Case | Notes                       |
+| ---------------- | ---------- | ------------ | --------------------------- |
+| **Frontier**     | O(b^d)     | O(bd)        | b=branching factor, d=depth |
+| **Explored**     | O(V)       | O(V)         | V = total states visited    |
+| **Node Storage** | O(V)       | O(V)         | One node per state          |
+| **Total**        | O(V + b^d) | O(V)         | Dominated by explored set   |
+
+#### Time Complexity Analysis
+
+| Operation               | Complexity | Frequency | Total Impact |
+| ----------------------- | ---------- | --------- | ------------ |
+| **Frontier Add**        | O(1)       | O(V)      | O(V)         |
+| **Frontier Remove**     | O(1)       | O(V)      | O(V)         |
+| **Explored Check**      | O(1)\*     | O(E)      | O(E)         |
+| **Neighbor Generation** | O(b)       | O(V)      | O(bV)        |
+
+\*Using map-based implementation
+
+## Chapter 6: Algorithm Variations and Data Structure Impact
+
+### 6.1 Search Strategy Comparison
+
+#### Stack vs Queue Impact
+
+| Algorithm      | Data Structure | Exploration Pattern | Path Quality         |
+| -------------- | -------------- | ------------------- | -------------------- |
+| **DFS**        | Stack (LIFO)   | Deep first          | May find suboptimal  |
+| **BFS**        | Queue (FIFO)   | Level by level      | Finds shortest path  |
+| **Best-First** | Priority Queue | Lowest cost first   | Depends on heuristic |
+
+### 6.2 Data Structure Substitution
+
+```go
+// Generic search framework
+type SearchAlgorithm struct {
+    frontier  FrontierInterface
+    explored  ExploredInterface
+    generator NeighborGenerator
+}
+
+// FrontierInterface allows different strategies
+type FrontierInterface interface {
+    Add(node *Node)
+    Remove() (*Node, error)
+    IsEmpty() bool
+    Contains(state Point) bool
+}
+
+// DFS Implementation
+func NewDepthFirstSearch() *SearchAlgorithm {
+    return &SearchAlgorithm{
+        frontier:  NewStackFrontier(),     // LIFO behavior
+        explored:  NewMapExploredSet(),
+        generator: NewGridNeighborGenerator(),
+    }
+}
+
+// BFS Implementation
+func NewBreadthFirstSearch() *SearchAlgorithm {
+    return &SearchAlgorithm{
+        frontier:  NewQueueFrontier(),     // FIFO behavior
+        explored:  NewMapExploredSet(),
+        generator: NewGridNeighborGenerator(),
+    }
+}
+```
+
+## Chapter 7: Real-World Applications
+
+### 7.1 Web Crawling
+
+```go
+type WebCrawler struct {
+    frontier []string           // URLs to visit
+    visited  map[string]bool    // Already crawled URLs
+}
+
+func (w *WebCrawler) Crawl(startURL string) {
+    w.frontier = append(w.frontier, startURL)
+
+    for len(w.frontier) > 0 {
+        // Stack behavior - depth-first crawling
+        url := w.frontier[len(w.frontier)-1]
+        w.frontier = w.frontier[:len(w.frontier)-1]
+
+        if w.visited[url] {
+            continue
+        }
+
+        links := w.extractLinks(url)
+        w.frontier = append(w.frontier, links...)
+        w.visited[url] = true
+    }
+}
+```
+
+### 7.2 File System Navigation
+
+```go
+type FileSystemSearch struct {
+    directories []string        // Stack of directories to explore
+    processed   map[string]bool // Already processed directories
+    results     []string        // Found files matching criteria
+}
+
+func (fs *FileSystemSearch) FindFiles(root string, pattern string) []string {
+    fs.directories = append(fs.directories, root)
+
+    for len(fs.directories) > 0 {
+        // Stack behavior - depth-first directory traversal
+        dir := fs.directories[len(fs.directories)-1]
+        fs.directories = fs.directories[:len(fs.directories)-1]
+
+        entries := fs.listDirectory(dir)
+        for _, entry := range entries {
+            if fs.isDirectory(entry) {
+                fs.directories = append(fs.directories, entry)
+            } else if fs.matchesPattern(entry, pattern) {
+                fs.results = append(fs.results, entry)
+            }
+        }
+
+        fs.processed[dir] = true
+    }
+
+    return fs.results
+}
+```
+
+## Key Takeaways
+
+### Essential Data Structure Principles
+
+| Principle                  | Description                                    | Impact              |
+| -------------------------- | ---------------------------------------------- | ------------------- |
+| **Separation of Concerns** | Each structure has specific responsibility     | Maintainable code   |
+| **Interface Consistency**  | Uniform operations across implementations      | Flexible algorithms |
+| **Memory Efficiency**      | Store only necessary information               | Scalable solutions  |
+| **Performance Awareness**  | Choose structures based on operation frequency | Efficient execution |
+
+### Algorithm Design Patterns
+
+1. **Frontier Management**: Control exploration order through data structure choice
+2. **State Tracking**: Prevent cycles and redundant work through explored sets
+3. **Path Reconstruction**: Maintain parent links for solution extraction
+4. **Incremental Processing**: Process one state at a time for memory efficiency
+
+### Transferable Concepts
+
+These data structure patterns apply beyond maze solving:
+
+- **Graph Traversal**: Social networks, dependency resolution, route planning
+- **Tree Processing**: File systems, organizational hierarchies, decision trees
+- **State Space Search**: Game AI, planning problems, optimization
+- **Resource Management**: Task scheduling, memory allocation, queue processing
+
+### Preparation for Implementation
+
+Understanding these data structures prepares you for the complete **DFS Algorithm Implementation** in the next module, where you'll see how all components integrate into a working solution.
+
+**Study Recommendation**: Practice implementing stack and queue operations manually before proceeding to see how they orchestrate complex algorithm behavior.
 
 ## The Frontier: Tracking What to Explore
 
